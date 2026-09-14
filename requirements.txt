@@ -1,0 +1,18 @@
+# Core
+torch>=2.1.0
+diffusers>=0.27.0
+transformers>=4.38.0
+accelerate>=0.27.0
+peft>=0.9.0
+safetensors>=0.4.0
+
+# Training efficiency (LoRA on consumer GPUs)
+bitsandbytes>=0.42.0      # 8-bit Adam
+xformers                  # memory-efficient attention (optional but recommended)
+
+# Eval + data
+pillow>=10.0.0
+numpy>=1.24.0
+
+# The diffusers DreamBooth-LoRA-SDXL training script lives in the diffusers repo
+# under examples/dreambooth/. train_lora.sh downloads it for you.
