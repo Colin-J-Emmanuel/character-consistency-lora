@@ -1,16 +1,15 @@
-# weights & large artifacts
-outputs/lora/
-outputs/samples/*.png
+# weights, large artifacts, and the Colab Drive symlink
+/outputs
 *.safetensors
 *.ckpt
+*.bin
 
-# the fetched training script
-scripts/train_dreambooth_lora_sdxl.py
+# fetched at runtime, not ours
+train_dreambooth_lora_sdxl.py
 
-# data (don't commit images unless you have rights)
-data/my_character/*
-data/class_person/*
-!data/README.md
+# training images (no rights, and large)
+data/my_character/
+data/class_person/
 
 # python
 __pycache__/
@@ -18,3 +17,6 @@ __pycache__/
 .venv/
 venv/
 .ipynb_checkpoints/
+
+# macOS
+.DS_Store
