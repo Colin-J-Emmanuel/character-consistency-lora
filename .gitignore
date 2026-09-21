@@ -1,6 +1,6 @@
 # weights, large artifacts, and the Colab Drive symlink
 /outputs
-*.safetensors
+# *.safetensors
 *.ckpt
 *.bin
 
