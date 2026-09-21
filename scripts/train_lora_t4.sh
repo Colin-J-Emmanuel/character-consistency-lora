@@ -7,10 +7,9 @@
 #   resolution 768        1024 OOMs on 16GB with this script. 768 fits.
 #   gradient_checkpointing  recomputes activations in the backward pass.
 #                         Trades roughly 30% speed for a large memory saving.
-#   cache_latents         encodes the training images once, then evicts the
-#                         VAE from GPU. Frees ~1GB for the whole run.
-#   use_8bit_adam         optimizer states in 8-bit instead of fp32. Adam keeps
-#                         two moments per parameter, so this is real savings.
+#   use_8bit_adam         optimizer states in 8-bit. For LoRA the saving is
+#                         modest, since only adapter weights are trainable,
+#                         but on 16GB every few hundred MB counts.
 #   mixed_precision fp16  T4 is Turing, bf16 is unavailable. fp16 with SDXL is
 #                         NaN-prone through the stock VAE, which is exactly why
 #                         pretrained_vae_model_name_or_path points at the fix.
@@ -52,7 +51,6 @@ accelerate launch train_dreambooth_lora_sdxl.py \
   --train_batch_size=1 \
   --gradient_accumulation_steps=1 \
   --gradient_checkpointing \
-  --cache_latents \
   --use_8bit_adam \
   --learning_rate="${LR}" \
   --lr_scheduler="constant" \

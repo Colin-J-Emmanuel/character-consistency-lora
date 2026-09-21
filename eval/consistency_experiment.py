@@ -65,6 +65,36 @@ CLIP_MODEL = "openai/clip-vit-large-patch14"
 DINO_MODEL = "facebook/dinov2-base"
 
 
+def place_on_gpu(pipe):
+    """Keep the whole pipeline on GPU when it fits, offload when it does not.
+
+    24GB cards (L4, A10) hold SDXL comfortably, and CPU offload would only
+    add host-to-device traffic on every forward pass. 16GB cards (T4) need it.
+    """
+    vram_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
+    if vram_gb >= 20:
+        pipe.to("cuda")
+    else:
+        pipe.enable_model_cpu_offload()
+    pipe.vae.enable_slicing()   # moved off the pipeline in diffusers 0.39
+
+
+def _clip_text_embed(clip, **inputs):
+    # transformers 5 returns a model output from get_text_features, not a
+    # tensor. Calling the submodules directly is stable across versions and
+    # makes the projection explicit: pooler_output alone is the pre-projection
+    # hidden state (768 for text, 1024 for vision), not the shared CLIP space.
+    out = clip.text_model(**inputs)
+    pooled = out[1] if not isinstance(out, torch.Tensor) else out
+    return clip.text_projection(pooled)
+
+
+def _clip_image_embed(clip, **inputs):
+    out = clip.vision_model(**inputs)
+    pooled = out[1] if not isinstance(out, torch.Tensor) else out
+    return clip.visual_projection(pooled)
+
+
 def build_prompt(character: str, scene: str) -> str:
     return f"a photo of {character}, {scene}, natural lighting, 50mm portrait"
 
@@ -74,7 +104,7 @@ def build_prompt(character: str, scene: str) -> str:
 # --------------------------------------------------------------------------
 
 
-def load_pipeline(lora_dir: str | None):
+def load_pipeline(lora_dir: str | None, lora_scale: float = 1.0):
     from diffusers import AutoencoderKL, StableDiffusionXLPipeline
 
     if not torch.cuda.is_available():
@@ -90,17 +120,16 @@ def load_pipeline(lora_dir: str | None):
         use_safetensors=True,
     )
     if lora_dir:
-        pipe.load_lora_weights(lora_dir)
-        print(f"loaded LoRA from {lora_dir}")
+        pipe.load_lora_weights(lora_dir, adapter_name="character")
+        pipe.set_adapters(["character"], adapter_weights=[lora_scale])
+        print(f"loaded LoRA from {lora_dir} at scale {lora_scale}")
     pipe.set_progress_bar_config(disable=True)
-    pipe.enable_model_cpu_offload()   # keeps SDXL inside a 16GB T4
-    pipe.enable_vae_slicing()
+    place_on_gpu(pipe)
     return pipe
 
 
 def generate(out_dir, character, steps, base_seed, size, lora_dir, lora_scale):
-    pipe = load_pipeline(lora_dir)
-    extra = {"cross_attention_kwargs": {"scale": lora_scale}} if lora_dir else {}
+    pipe = load_pipeline(lora_dir, lora_scale)
 
     for arm_name, cfg in ARMS.items():
         arm_dir = os.path.join(out_dir, arm_name)
@@ -115,7 +144,6 @@ def generate(out_dir, character, steps, base_seed, size, lora_dir, lora_scale):
                 height=size,
                 width=size,
                 generator=torch.Generator(device="cpu").manual_seed(seed),
-                **extra,
             ).images[0]
             image.save(os.path.join(arm_dir, f"{i:02d}.png"))
             print(f"[{arm_name}] scene {i} seed={seed} cfg={cfg['guidance']}")
@@ -158,7 +186,7 @@ class Scorer:
     def embed(self, images):
         with torch.no_grad():
             ci = self.clip_proc(images=images, return_tensors="pt")
-            clip_img = self.clip.get_image_features(
+            clip_img = _clip_image_embed(self.clip,
                 **{k: v.to(self.device) for k, v in ci.items()}
             )
             di = self.dino_proc(images=images, return_tensors="pt")
@@ -175,7 +203,7 @@ class Scorer:
                 text=prompts, return_tensors="pt", padding=True, truncation=True
             )
             return _l2(
-                self.clip.get_text_features(
+                _clip_text_embed(self.clip,
                     **{k: v.to(self.device) for k, v in t.items()}
                 )
             )

@@ -1,68 +1,74 @@
 #!/usr/bin/env bash
-# Train a character LoRA on SDXL using the official diffusers DreamBooth script.
-# Using the maintained script (not a hand-rolled loop) is the standard, defensible
-# choice — but you should understand every flag below, because that's what an
-# interviewer will probe.
+# SDXL DreamBooth + LoRA on a 24GB card with bf16 (L4, A10, A100).
+# For a 16GB T4, use train_lora_t4.sh instead.
+#
+# The two scripts share every modeling choice (steps, LR, schedule, token)
+# and differ only in flags forced by hardware, so results are comparable.
+#
+#   resolution 1024         SDXL's native resolution.
+#   mixed_precision bf16    Same exponent range as fp32, so no overflow to NaN.
+#                           The fp16-fix VAE is kept anyway as belt and braces.
+#   gradient_checkpointing  Recomputes activations in the backward pass.
+#                           Needed at 1024 even on 24GB.
+#   rank 16                 LoRA capacity. Higher locks identity harder and
+#                           risks memorizing pose, background and clothing.
+#   800 steps, batch 1      ~67 epochs over 12 images. Checkpoint at 400 gives
+#                           an undertrained comparison point.
+#   no 8-bit Adam           For LoRA the trainable parameters are small, so
+#                           optimizer state is a few hundred MB at most.
+#                           8-bit Adam matters for full fine-tuning, not here.
+#   no xformers             PyTorch 2 SDPA is the default and equivalent.
+#   no prior preservation   Skipped for time. The known cost is class drift,
+#                           where every "woman" starts to look like sks.
+#
+# Usage:
+#   bash scripts/train_lora.sh
+#   MAX_STEPS=10 bash scripts/train_lora.sh      # smoke test
+
 set -euo pipefail
 
-# --- Get the official training script (one-time) ---------------------------
+INSTANCE_DIR="${INSTANCE_DIR:-data/my_character}"
+OUTPUT_DIR="${OUTPUT_DIR:-outputs/lora}"
+INSTANCE_PROMPT="${INSTANCE_PROMPT:-a photo of sks woman}"
+MAX_STEPS="${MAX_STEPS:-800}"
+RANK="${RANK:-16}"
+LR="${LR:-1e-4}"
+SEED="${SEED:-1234}"
+
+# Fetch the training script tagged for the INSTALLED diffusers version.
+# Scripts on main usually require an unreleased dev version and refuse to run.
 SCRIPT="train_dreambooth_lora_sdxl.py"
 if [ ! -f "$SCRIPT" ]; then
-  echo "Fetching $SCRIPT from diffusers..."
-  curl -L -o "$SCRIPT" \
-    https://raw.githubusercontent.com/huggingface/diffusers/main/examples/dreambooth/${SCRIPT}
+  V=$(python -c "import diffusers; print(diffusers.__version__)")
+  echo "Fetching $SCRIPT for diffusers v$V..."
+  curl -fsSL -o "$SCRIPT" \
+    "https://raw.githubusercontent.com/huggingface/diffusers/v${V}/examples/dreambooth/${SCRIPT}"
 fi
 
-# --- Config ----------------------------------------------------------------
-export MODEL_NAME="stabilityai/stable-diffusion-xl-base-1.0"
-# SDXL's default VAE produces NaNs in fp16; this fixed VAE is the standard workaround.
-export VAE_NAME="madebyollin/sdxl-vae-fp16-fix"
-export INSTANCE_DIR="data/my_character"
-export OUTPUT_DIR="outputs/lora"
-
-# 'sks' is a rare token with little prior meaning, so the model binds it to YOUR
-# character instead of overwriting a common word. Keep the class word ("person",
-# or "man"/"woman"/"character") accurate — it anchors the prior.
-INSTANCE_PROMPT="a photo of sks person"
-CLASS_PROMPT="a photo of a person"          # only used if prior-preservation is on
-VALIDATION_PROMPT="a photo of sks person hiking a mountain at sunrise"
-
 accelerate launch "$SCRIPT" \
-  --pretrained_model_name_or_path="$MODEL_NAME" \
-  --pretrained_vae_model_name_or_path="$VAE_NAME" \
+  --pretrained_model_name_or_path="stabilityai/stable-diffusion-xl-base-1.0" \
+  --pretrained_vae_model_name_or_path="madebyollin/sdxl-vae-fp16-fix" \
   --instance_data_dir="$INSTANCE_DIR" \
   --output_dir="$OUTPUT_DIR" \
   --instance_prompt="$INSTANCE_PROMPT" \
-  --validation_prompt="$VALIDATION_PROMPT" \
+  --mixed_precision="bf16" \
   --resolution=1024 \
   --train_batch_size=1 \
-  --gradient_accumulation_steps=4 \
+  --gradient_accumulation_steps=1 \
   --gradient_checkpointing \
-  --learning_rate=1e-4 \
+  --learning_rate="$LR" \
   --lr_scheduler="constant" \
   --lr_warmup_steps=0 \
-  --rank=16 \
-  --max_train_steps=1000 \
-  --checkpointing_steps=250 \
-  --validation_epochs=25 \
-  --seed=42 \
-  --mixed_precision="fp16" \
-  --use_8bit_adam \
-  --enable_xformers_memory_efficient_attention
+  --rank="$RANK" \
+  --max_train_steps="$MAX_STEPS" \
+  --checkpointing_steps=400 \
+  --seed="$SEED"
 
-# ---------------------------------------------------------------------------
-# HYPERPARAMETER NOTES (know these cold)
-#   rank=16              LoRA capacity. 8=lighter/less overfit, 32=more capacity.
-#   max_train_steps=1000 Single subject: 800–1500 is the usual band. Too many
-#                        steps = overfitting (character always in the same pose).
-#   learning_rate=1e-4   Standard for LoRA; full fine-tunes use far smaller LRs.
-#   resolution=1024      SDXL native. Drop to 768 if you're VRAM-limited (T4).
-#   grad_checkpointing + 8bit_adam + xformers  = the trio that fits SDXL LoRA
-#                        onto ~16GB. Trades compute/precision for memory.
-#
-# PRIOR PRESERVATION (optional, reduces overfitting/forgetting):
-#   add these flags and generate ~100–200 class images first:
-#     --with_prior_preservation --prior_loss_weight=1.0 \
-#     --class_prompt="$CLASS_PROMPT" --class_data_dir="data/class_person" \
-#     --num_class_images=200
-# ---------------------------------------------------------------------------
+echo
+echo "Adapter: $OUTPUT_DIR"
+echo "Step-400 checkpoint: $OUTPUT_DIR/checkpoint-400"
+
+# Prior preservation, if you want to test class drift later:
+#   --with_prior_preservation --prior_loss_weight=1.0 \
+#   --class_prompt="a photo of a woman" --class_data_dir="data/class_woman" \
+#   --num_class_images=200

@@ -65,6 +65,20 @@ BASE_MODEL = "stabilityai/stable-diffusion-xl-base-1.0"
 FIXED_VAE = "madebyollin/sdxl-vae-fp16-fix"
 
 
+def place_on_gpu(pipe):
+    """Keep the whole pipeline on GPU when it fits, offload when it does not.
+
+    24GB cards (L4, A10) hold SDXL comfortably, and CPU offload would only
+    add host-to-device traffic on every forward pass. 16GB cards (T4) need it.
+    """
+    vram_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
+    if vram_gb >= 20:
+        pipe.to("cuda")
+    else:
+        pipe.enable_model_cpu_offload()
+    pipe.vae.enable_slicing()   # moved off the pipeline in diffusers 0.39
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out_dir", default="data/my_character")
@@ -92,8 +106,7 @@ def main():
         variant="fp16", use_safetensors=True,
     )
     pipe.set_progress_bar_config(disable=True)
-    pipe.enable_model_cpu_offload()
-    pipe.enable_vae_slicing()
+    place_on_gpu(pipe)
 
     hero = pipe(
         prompt=HERO,
@@ -110,7 +123,7 @@ def main():
     # Reuse the loaded components, no second 7GB download or second copy in RAM.
     i2i = StableDiffusionXLImg2ImgPipeline(**pipe.components)
     i2i.set_progress_bar_config(disable=True)
-    i2i.enable_model_cpu_offload()
+    place_on_gpu(i2i)
 
     for i, variation in enumerate(VARIATIONS[: args.n - 1]):
         img = i2i(
