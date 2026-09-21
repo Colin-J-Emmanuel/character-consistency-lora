@@ -1,0 +1,111 @@
+{
+  "run_utc": "2026-09-21T20:21:47.646109+00:00",
+  "base_model": "stabilityai/stable-diffusion-xl-base-1.0",
+  "lora_dir": null,
+  "lora_scale": null,
+  "character": "a 28-year-old woman with short curly auburn hair, light freckles across the nose, green eyes, and a small scar above the left eyebrow",
+  "scenes": [
+    "sitting at a table in a busy coffee shop",
+    "standing on a city street at night in the rain",
+    "hiking on a mountain trail in bright daylight",
+    "in a spacesuit aboard a space station",
+    "wearing medieval armor in a stone courtyard",
+    "laughing at an outdoor summer picnic"
+  ],
+  "steps": 30,
+  "base_seed": 1234,
+  "resolution": 1024,
+  "face_crop": true,
+  "arms": {
+    "prompt_only": {
+      "n_images": 6,
+      "clip_i_self_consistency_mean": 0.8662,
+      "clip_i_self_consistency_worst_pair": 0.7891,
+      "dino_self_consistency_mean": 0.6174,
+      "dino_self_consistency_worst_pair": 0.4113,
+      "per_pair_dino": [
+        0.7138,
+        0.6539,
+        0.4927,
+        0.6225,
+        0.7604,
+        0.8137,
+        0.4908,
+        0.8496,
+        0.5653,
+        0.4934,
+        0.822,
+        0.6089,
+        0.4544,
+        0.4113,
+        0.5079
+      ],
+      "face_crop": true,
+      "images_without_face": [],
+      "config": {
+        "fixed_seed": false,
+        "guidance": 7.0
+      }
+    },
+    "fixed_seed": {
+      "n_images": 6,
+      "clip_i_self_consistency_mean": 0.8641,
+      "clip_i_self_consistency_worst_pair": 0.7353,
+      "dino_self_consistency_mean": 0.698,
+      "dino_self_consistency_worst_pair": 0.5015,
+      "per_pair_dino": [
+        0.734,
+        0.7454,
+        0.6936,
+        0.6902,
+        0.7062,
+        0.8213,
+        0.7145,
+        0.838,
+        0.5432,
+        0.6967,
+        0.8394,
+        0.6812,
+        0.7291,
+        0.5352,
+        0.5015
+      ],
+      "face_crop": true,
+      "images_without_face": [],
+      "config": {
+        "fixed_seed": true,
+        "guidance": 7.0
+      }
+    },
+    "high_cfg": {
+      "n_images": 6,
+      "clip_i_self_consistency_mean": 0.849,
+      "clip_i_self_consistency_worst_pair": 0.7244,
+      "dino_self_consistency_mean": 0.7059,
+      "dino_self_consistency_worst_pair": 0.4972,
+      "per_pair_dino": [
+        0.7673,
+        0.8054,
+        0.721,
+        0.663,
+        0.7523,
+        0.8195,
+        0.7686,
+        0.7193,
+        0.5735,
+        0.7446,
+        0.7582,
+        0.6923,
+        0.7434,
+        0.5632,
+        0.4972
+      ],
+      "face_crop": true,
+      "images_without_face": [],
+      "config": {
+        "fixed_seed": true,
+        "guidance": 12.0
+      }
+    }
+  }
+}

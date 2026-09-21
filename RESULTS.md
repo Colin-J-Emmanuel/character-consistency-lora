@@ -1,55 +1,83 @@
 # Results
 
-## Experiment 1: how far does prompting alone get you?
+All numbers are mean pairwise cosine similarity across the six images in an arm (15 pairs), except CLIP-T, which is the mean over images. Gaps below about 0.05 are within noise at this sample size. Raw values are in each `results/*/eval.json` and `eval_face.json`.
 
-Before fine-tuning anything, I measured the problem. One character description,
-six scenes, SDXL base, three arms varying only seed strategy and guidance scale.
-Identity is measured as mean pairwise similarity between the six generations
-(CLIP image embeddings and DINOv2 CLS embeddings). Scene fidelity is CLIP
-similarity to the scene text only, with the character description excluded so
-that identity and prompt-following stay separable.
+## Conditions
 
-Run: `python eval/baseline_consistency.py --out_dir results/baseline`
+| Condition | Directory | Prompt subject | Adapter |
+| --- | --- | --- | --- |
+| Text only | `results/baseline` | Full character description | None |
+| LoRA token only | `results/lora` | `sks woman` | LoRA, scale 1.0 |
+| Text + LoRA | `results/lora_desc` | `sks woman` followed by the full description | LoRA, scale 1.0 |
 
-| Arm | Seed | CFG | DINO self-consistency | DINO worst pair | CLIP-I self-consistency | CLIP-T scene |
-|---|---|---|---|---|---|---|
-| prompt_only | varied | 7.0 | | | | |
-| fixed_seed | fixed | 7.0 | | | | |
-| high_cfg | fixed | 12.0 | | | | |
+Scenes, seeds, arms, sampler, steps and resolution are identical across all three.
 
-Grids: `results/baseline/grid_*.png`. Raw numbers: `results/baseline/baseline_eval.json`.
+## Face-cropped scoring
 
-### What I observed
+Largest detected face per image, 30% margin. 6 of 6 faces detected in every arm of every condition.
 
-<!-- Fill these in from the actual run. Three or four honest sentences beats
-     a page of hedging. Things to look for:
-     - Does a fixed seed actually preserve identity when the scene prompt
-       changes, or does it only stabilize composition and palette?
-     - Does DINO separate the arms more sharply than CLIP-I? If so, say why:
-       CLIP was trained on semantic categories and will score two different
-       people in similar clothing as highly similar, DINOv2 is
-       instance-discriminative.
-     - What does raising guidance do to scene fidelity versus identity?
-     - Which pair scored worst, and what changed between those two images?
-       Hair length? Face shape? Age? Name the specific failure. -->
+**DINO self-consistency (mean / worst pair)**
 
-### Why this is the right baseline
+| Arm | Text only | LoRA token only | Text + LoRA |
+| --- | --- | --- | --- |
+| prompt_only | 0.503 / 0.216 | 0.552 / 0.284 | 0.617 / 0.411 |
+| fixed_seed | 0.663 / 0.533 | 0.555 / 0.344 | 0.698 / 0.502 |
+| high_cfg | 0.617 / 0.476 | 0.574 / 0.351 | 0.706 / 0.497 |
 
-Any fine-tuning result has to beat these numbers on the same metric
-definitions, same character, same scenes, same seeds. Reporting a DINO score
-for a LoRA without a measured floor to compare it against says nothing.
+**CLIP-I self-consistency (mean)**
 
-## Experiment 2: LoRA fine-tune
+| Arm | Text only | LoRA token only | Text + LoRA |
+| --- | --- | --- | --- |
+| prompt_only | 0.857 | 0.798 | 0.866 |
+| fixed_seed | 0.862 | 0.830 | 0.864 |
+| high_cfg | 0.855 | 0.820 | 0.849 |
 
-<!-- To be filled after the training run. Reuse the same six scenes and the
-     same seeds so the comparison is apples to apples. -->
+## Whole-frame scoring
 
-## Limitations
+**DINO self-consistency (mean / worst pair)**
 
-- Six scenes and six images per arm is a small sample. Pairwise similarity
-  means are noisy at this N, so treat gaps below roughly 0.05 as inconclusive.
-- The character is synthetic, generated from a text description rather than
-  photographed, so there is no ground-truth reference set for this experiment.
-  Reference-based CLIP-I and DINO enter in Experiment 2.
-- Single base model, single sampler, single resolution. No claim is made about
-  how these numbers transfer to other backbones.
+| Arm | Text only | LoRA token only | Text + LoRA |
+| --- | --- | --- | --- |
+| prompt_only | 0.239 / 0.060 | 0.162 / 0.005 | 0.362 / 0.096 |
+| fixed_seed | 0.291 / 0.130 | 0.245 / 0.076 | 0.366 / 0.148 |
+| high_cfg | 0.302 / 0.114 | 0.252 / 0.074 | 0.368 / 0.180 |
+
+**CLIP-I self-consistency (mean)**
+
+| Arm | Text only | LoRA token only | Text + LoRA |
+| --- | --- | --- | --- |
+| prompt_only | 0.800 | 0.739 | 0.762 |
+| fixed_seed | 0.822 | 0.772 | 0.817 |
+| high_cfg | 0.795 | 0.767 | 0.803 |
+
+**CLIP-T scene fidelity (mean)**
+
+| Arm | Text only | LoRA token only | Text + LoRA |
+| --- | --- | --- | --- |
+| prompt_only | 0.233 | 0.239 | 0.208 |
+| fixed_seed | 0.209 | 0.232 | 0.205 |
+| high_cfg | 0.213 | 0.236 | 0.217 |
+
+## Training set
+
+One txt2img hero portrait (seed 7) plus eleven img2img variations, scored on whole frames.
+
+| img2img strength | DINO mean | DINO worst pair | CLIP-I mean |
+| --- | --- | --- | --- |
+| 0.50 | 0.971 | 0.942 | 0.975 |
+| 0.65 (used) | 0.950 | 0.884 | 0.965 |
+
+Grid: `results/training_set/grid_s065.png`.
+
+## Training run
+
+800 steps at batch size 1 (67 epochs over 12 images), rank 16, learning rate 1e-4 constant, 1024px, bf16, on an L4. About 1.4 seconds per step, 19.5 minutes total. Checkpoints saved at steps 400 and 800. Instance prompt: `a photo of sks woman, sage green sweater, plain grey backdrop`.
+
+## Notes
+
+- **Text + LoRA vs text only** is the controlled comparison. Face DINO rises by 0.11 (`prompt_only`) and 0.09 (`high_cfg`), and by 0.04 (`fixed_seed`), which is within noise.
+- **The LoRA token alone underperforms the description** on face crops in all three arms.
+- **The token-only condition has the highest scene fidelity** in every arm, consistent with a short subject leaving the scene words more weight. The same shift toward wider compositions explains its low whole-frame similarity.
+- **Face-crop CLIP-I barely separates the conditions** (0.80 to 0.87), while face-crop DINO ranges from 0.50 to 0.71.
+- **Green outerwear** appears in the coffee shop, rain and hiking scenes in both the text-only and token-only `prompt_only` grids, so it cannot be attributed to entanglement with the training sweater.
+- **The scar** never appears in the training set and so could not be learned.

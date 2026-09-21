@@ -20,3 +20,6 @@ venv/
 
 # macOS
 .DS_Store
+
+# per-image generations; grids and JSON are tracked
+results/*/*/

@@ -1,51 +1,34 @@
 # Character Consistency with SDXL LoRA
 
-How well does Stable Diffusion XL keep one character's identity across different scenes, and how much does a DreamBooth LoRA fine-tune improve on prompting alone?
+How well does Stable Diffusion XL keep one character's identity across different scenes, and how much does a DreamBooth LoRA fine-tune add on top of prompting?
 
-This repo measures that with a fixed character, a fixed set of scenes, fixed seeds, and one shared set of metric definitions, so the baseline and fine-tuned runs are directly comparable.
+This repo measures that with a fixed character, a fixed set of scenes, fixed seeds, and one shared set of metric definitions. Full tables are in [RESULTS.md](RESULTS.md).
 
-**Status:** the prompting baseline and the training-set diagnostics are complete. The LoRA fine-tune is in progress; its results will be added below and in [RESULTS.md](RESULTS.md).
+## Headline result
 
-## Results so far
+Adding the LoRA to the same text description makes faces more consistent across scenes. Face-cropped DINOv2 self-consistency, where higher means the six faces in an arm look more alike:
 
-### Experiment 1: prompting alone
-
-One detailed character description, six scenes, SDXL base, three arms that vary only seed strategy and guidance scale. Identity is mean pairwise similarity across each arm's six images. Scene fidelity is CLIP similarity to the scene text alone, with the character description excluded, so identity and prompt-following stay separable.
-
-| Arm | Seed | CFG | DINO self-consistency | DINO worst pair | CLIP-I self-consistency | CLIP-T scene |
-| --- | --- | --- | --- | --- | --- | --- |
-| prompt_only | varied | 7.0 | 0.239 | 0.060 | 0.800 | 0.233 |
-| fixed_seed | fixed | 7.0 | 0.291 | 0.130 | 0.822 | 0.209 |
-| high_cfg | fixed | 12.0 | 0.302 | 0.114 | 0.795 | 0.213 |
-
-Grids: `results/baseline/grid_*.png`. Raw numbers: `results/baseline/eval.json`.
-
-### Training set diagnostics
-
-The training set is one txt2img hero portrait plus eleven img2img variations of it. Before training, its self-consistency was measured with the same metrics.
-
-| img2img strength | DINO self-consistency | DINO worst pair | CLIP-I self-consistency |
+| Arm | Text only | LoRA token only | Text + LoRA |
 | --- | --- | --- | --- |
-| 0.50 | 0.971 | 0.942 | 0.975 |
-| 0.65 | 0.950 | 0.884 | 0.965 |
+| prompt_only (varied seed, CFG 7) | 0.50 | 0.55 | **0.62** |
+| fixed_seed (one seed, CFG 7) | 0.66 | 0.55 | **0.70** |
+| high_cfg (one seed, CFG 12) | 0.62 | 0.57 | **0.71** |
 
-The 0.65 set is the one used for training. Grid: `results/training_set/grid_s065.png`.
-
-### Experiment 2: LoRA fine-tune
-
-In progress. The fine-tuned model is evaluated on the same six scenes, seeds and arms as Experiment 1, prompted with the trained token `sks woman`.
+- **Text + LoRA vs text only** isolates the adapter, since the prompts are otherwise identical. Gains of 0.11 and 0.09 in two arms are clear; 0.04 in the fixed-seed arm is within noise at this sample size. In `prompt_only`, the worst pair rises from 0.22 to 0.41, so the adapter mostly removes outlier faces.
+- **The LoRA token alone does not beat the text description.** Trained on twelve near-identical portraits, `sks woman` complements the description rather than replacing it.
+- **Scene fidelity cost is small.** Whole-frame CLIP-T fell by 0.025 in `prompt_only` and was flat in the other two arms.
 
 ## What we learned
 
-**CLIP reports success on a consistency task that is failing.** In the baseline, CLIP-I self-consistency was about 0.80 while DINOv2 was about 0.24 on the same images. CLIP was trained to match images to semantic descriptions, so six portraits of auburn-haired, freckled women score as near-identical. DINOv2 is instance-discriminative and correctly treats them as different people. A category-level metric alone would have hidden the problem.
+**Whole-frame metrics misled twice.** Scored on whole images, the token-only LoRA looked worse than the baseline (DINO 0.24 down to 0.16). The prompts differed: the baseline spelled out the face in detail, while `sks woman` left the scene words more weight, so compositions spread out into full-body and wide shots. Whole-frame similarity dropped because the frames differed, not because the faces did. Whole-frame scoring also hid how much a fixed seed helps (below). Scoring face crops fixed both.
 
-**Seed and guidance do not control identity.** Fixing the seed moved DINO from 0.24 to 0.29, and raising guidance to 12 added nothing further. With 15 pairs per arm, gaps this size are within noise. Both fixed-seed arms also followed the scene slightly worse (CLIP-T 0.233 down to about 0.21), consistent with being anchored to one initial noise sample.
+**A fixed seed is a strong face-consistency lever on its own.** On whole frames, fixing the seed moved DINO only from 0.24 to 0.29. On face crops it moves from 0.50 to 0.66. Some of that is likely shared head angle and lighting from the same starting noise rather than identity, since DINO sees pose and expression too.
 
-**Text conditioning produces an attribute bundle, not a person.** Every baseline image kept the high-prior attributes: red curly hair, freckles, green eyes. Face shape, apparent age and hair length drifted between scenes. The most distinctive attribute in the description, a small scar above the left eyebrow, was absent from all six scenes and from the dedicated hero portrait.
+**CLIP cannot tell these faces apart.** On whole frames, CLIP-I was about 0.80 while DINOv2 was 0.24 on the same images. On face crops, CLIP-I sits between 0.80 and 0.87 across every condition while DINO spreads from 0.50 to 0.71. CLIP matches images to semantic descriptions, so any auburn-haired, freckled woman scores alike. DINOv2 is instance-discriminative.
 
-**Img2img from one frontal reference cannot produce pose diversity.** The variation prompts asked for profile and three-quarter views, different lighting and darker backgrounds. None of these appeared. Raising strength from 0.5 to 0.65 lowered DINO self-consistency only from 0.971 to 0.950. Img2img starts from the reference's noised latent, so spatial layout survives at any strength that also preserves the face. A 0.97 training set is a warning sign, not a success: it means near-duplicates.
+**Text conditioning produces an attribute bundle, not a person.** Every baseline image kept red curly hair, freckles and green eyes. Face shape, apparent age and hair length drifted. The scar above the left eyebrow never appeared, in the baseline or in the training hero, so the LoRA had no way to learn it.
 
-**Shared clothing and background risk entanglement.** Every training image shares the sage green sweater and the grey backdrop, so the LoRA could learn `sks woman` as "a woman in a green sweater". The training run names both in the instance prompt, so the model can attribute them to those words rather than to the token. Whether green fabric leaks into the armor and spacesuit scenes is the check.
+**Img2img from one frontal reference cannot produce pose diversity.** The training-set prompts asked for profile and three-quarter views, different lighting and darker backgrounds; none appeared. Raising strength from 0.5 to 0.65 lowered the set's DINO self-consistency only from 0.971 to 0.950. Img2img preserves spatial layout, so a single frontal reference yields near-duplicates. This is the most likely reason the token alone did not transfer identity to new scenes.
 
 ## Method
 
@@ -55,28 +38,41 @@ In progress. The fine-tuned model is evaluated on the same six scenes, seeds and
 
 **Arms:** `prompt_only` (varied seed, CFG 7), `fixed_seed` (one seed, CFG 7), `high_cfg` (one seed, CFG 12). SDXL base, 30 steps, 1024 x 1024.
 
+**Conditions:**
+
+| Condition | Prompt subject | Adapter |
+| --- | --- | --- |
+| Text only | Full character description | None |
+| LoRA token only | `sks woman` | LoRA |
+| Text + LoRA | `sks woman` followed by the full description | LoRA |
+
 **Metrics:**
 
 | Metric | Model | What it measures |
 | --- | --- | --- |
-| CLIP-I self-consistency | CLIP ViT-L/14 image embeddings | Semantic similarity between generations |
 | DINO self-consistency | DINOv2-base CLS token | Instance-level similarity between generations |
-| CLIP-T scene fidelity | CLIP ViT-L/14 image vs scene text | Whether the scene was followed |
+| CLIP-I self-consistency | CLIP ViT-L/14 image embeddings | Semantic similarity between generations |
+| CLIP-T scene fidelity | CLIP ViT-L/14 image vs scene text | Whether the scene was followed (whole frames only) |
 
-**Training:** DreamBooth LoRA on the SDXL UNet using the official diffusers script. Rank 16, learning rate 1e-4 constant, 800 steps at batch size 1, text encoders frozen, no prior preservation.
+Each metric is computed on whole frames and on face crops. Face crops use OpenCV's Haar detector on the largest face with a 30% margin; all 54 generated images had a detected face.
+
+**Training set:** one txt2img hero portrait plus eleven img2img variations at strength 0.65, all synthetic.
+
+**Training:** DreamBooth LoRA on the SDXL UNet with the official diffusers script. Rank 16, learning rate 1e-4 constant, 800 steps at batch size 1, 1024px, bf16, text encoders frozen, no prior preservation. The instance prompt names the shared sweater and backdrop so they bind to those words rather than the token. About 20 minutes on an L4.
 
 ## Repository layout
 
 ```
 eval/consistency_experiment.py   Generation and scoring harness: baseline arms, LoRA arms,
-                                 single-folder diagnostics, and before/after comparison
+                                 whole-frame and face-cropped scoring, single-folder
+                                 diagnostics, and before/after comparison
 scripts/make_character_set.py    Builds the synthetic training set (hero + img2img variations)
 scripts/train_lora.sh            Training config for 24GB cards with bf16 (L4, A10, A100)
 scripts/train_lora_t4.sh         Training config for 16GB T4 cards
 notebook/run_experiments_t4.ipynb  Colab runner for the full pipeline (runs on T4 or L4)
 data/                            Training images (gitignored), see data/README.md
 results/                         Metrics, JSON and contact sheets (tracked)
-RESULTS.md                       Detailed write-up of each experiment
+RESULTS.md                       Full results tables and notes
 ```
 
 ## Running it
@@ -98,7 +94,7 @@ from google.colab import drive; drive.mount('/content/drive')
 
 Restart the Colab session after the installs, then re-run the Drive mount and `%cd` lines. `outputs/` is linked to Google Drive so trained adapters survive a disconnect.
 
-**1. Baseline:**
+**1. Baseline (text only):**
 
 ```bash
 python eval/consistency_experiment.py --out_dir results/baseline
@@ -128,18 +124,28 @@ On a T4, use `scripts/train_lora_t4.sh` instead. The two scripts share steps, le
 | L4, A10, A100 (24GB+) | `train_lora.sh` | 1024 | bf16 | Gradient checkpointing |
 | T4 (16GB) | `train_lora_t4.sh` | 768 | fp16 with fixed VAE | Gradient checkpointing, 8-bit Adam |
 
-**4. Evaluate the fine-tuned model and compare:**
+**4. Evaluate both LoRA conditions:**
 
 ```bash
 python eval/consistency_experiment.py --out_dir results/lora --lora_dir outputs/lora --character "sks woman"
-python eval/consistency_experiment.py --compare results/baseline/eval.json results/lora/eval.json
+python eval/consistency_experiment.py --out_dir results/lora_desc --lora_dir outputs/lora \
+    --character "sks woman, a 28-year-old woman with short curly auburn hair, light freckles across the nose, green eyes, and a small scar above the left eyebrow"
+```
+
+**5. Score face crops and compare:**
+
+```bash
+for d in baseline lora lora_desc; do
+  python eval/consistency_experiment.py --out_dir results/$d --eval_only --face_crop
+done
+python eval/consistency_experiment.py --compare results/baseline/eval_face.json results/lora_desc/eval_face.json
 ```
 
 `--lora_scale` sets adapter strength, and `--lora_dir outputs/lora/checkpoint-400` evaluates the intermediate checkpoint.
 
 ## Engineering notes
 
-These came up while running on current Colab images and are handled in the code.
+These came up while running on current Colab images and are handled in the code or setup.
 
 - **SDXL's stock VAE produces NaNs in fp16.** All pipelines load `madebyollin/sdxl-vae-fp16-fix`. On a T4, which has no bf16, this is what makes fp16 work at all.
 - **diffusers 0.39 moved VAE slicing** from the pipeline to `pipe.vae.enable_slicing()`.
@@ -148,20 +154,21 @@ These came up while running on current Colab images and are handled in the code.
 - **The training script is fetched for the installed diffusers version.** Scripts on the diffusers `main` branch usually require an unreleased dev version.
 - **PEFT refuses to run with Colab's preinstalled torchao 0.10.** The project does not use torchao, so setup uninstalls it.
 - **The `diffusers[training]` extra pins protobuf below 4**, which conflicts with Colab's Google libraries. Setup installs the needed packages individually and pins protobuf to a compatible range.
-- **LoRA scale is set through `set_adapters`**, which works under the PEFT backend.
 - **OpenCV 5 removed the Haar cascade face detector** from the main package. Face-cropped scoring needs the 4.x line, pinned in setup.
+- **LoRA scale is set through `set_adapters`**, which works under the PEFT backend.
+- **Diffusion training loss is not a quality signal.** Per-step loss mostly reflects which noise level was sampled, so evaluation uses generated images on held-out scenes instead.
 
 ## Limitations
 
 - **Small samples.** Six images per arm gives 15 pairs. Treat gaps below about 0.05 as inconclusive.
-- **Whole-frame metrics.** DINO and CLIP-I score the entire image, so scene, color and composition affect similarity alongside identity. Before and after deltas remain valid because scenes and seeds are identical across runs, but absolute values understate identity similarity. Face-cropped scoring or ArcFace embeddings would isolate identity.
-- **Synthetic, low-diversity training data.** All training images are frontal head-and-shoulders portraits with the same clothing and background. The fine-tuned model is likely to favor that framing.
-- **No reference ground truth for Experiment 1.** The character exists only as a text description, so baseline identity is measured as self-consistency rather than similarity to a reference.
-- **One base model, sampler and resolution.** No claims are made about other backbones.
+- **DINO on a face crop is not a face-recognition metric.** It responds to pose, expression, lighting and hair as well as identity. A face-recognition embedding such as ArcFace would measure identity more directly.
+- **Simple face detection.** The Haar detector is crude next to a learned detector. It found every face here, but distant or occluded faces could be missed or cropped poorly.
+- **Low-diversity synthetic training data.** All twelve training images are frontal head-and-shoulders portraits with the same clothing and background.
+- **One training run, one seed schedule, one base model.** No claims are made about variance across runs or other backbones.
 
 ## Next steps
 
-- Complete Experiment 2 and report before and after results on all three arms.
-- Add face-cropped identity scoring with ArcFace.
-- Sweep LoRA scale and compare the step-400 and step-800 checkpoints to measure the identity versus editability tradeoff.
-- Build a more diverse training set with multi-view generation or pose conditioning.
+- Score identity with a face-recognition embedding (ArcFace or OpenCV's SFace).
+- Compare the step-400 and step-800 checkpoints and sweep LoRA scale to trace the identity versus editability tradeoff.
+- Build a more diverse training set with multi-view generation or pose conditioning, and retest the token-only condition.
+- Add prior preservation and measure class drift.
