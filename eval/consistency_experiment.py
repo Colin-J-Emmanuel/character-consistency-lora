@@ -18,6 +18,7 @@ Modes
                       --lora_dir outputs/lora --character "sks woman"
     re-score      python consistency_experiment.py --out_dir results/lora --eval_only
     one folder    python consistency_experiment.py --eval_dir data/my_character
+    face crops    python consistency_experiment.py --out_dir results/lora --eval_only --face_crop
     compare       python consistency_experiment.py --compare \
                       results/baseline/eval.json results/lora/eval.json
 """
@@ -173,6 +174,35 @@ def _mean_pairwise(emb):
     return float(np.mean(sims)), float(np.min(sims)), sims
 
 
+def _face_crop(img, margin=0.3, min_frac=0.06):
+    """Crop to the largest detected face, with margin, or return None.
+
+    Whole-frame embeddings mix identity with scene, colour and composition.
+    Scoring face crops isolates identity, which is what this project measures.
+    OpenCV's Haar detector ships with opencv-python, so this adds no
+    dependency. It is crude next to a learned detector plus ArcFace, but it is
+    reliable on the mostly frontal faces these prompts produce.
+    """
+    import cv2
+
+    rgb = np.array(img)
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    detector = cv2.CascadeClassifier(
+        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    )
+    h, w = gray.shape
+    min_side = int(min(h, w) * min_frac)
+    faces = detector.detectMultiScale(
+        gray, scaleFactor=1.1, minNeighbors=6, minSize=(min_side, min_side)
+    )
+    if len(faces) == 0:
+        return None
+    x, y, fw, fh = max(faces, key=lambda f: f[2] * f[3])
+    mx, my = int(fw * margin), int(fh * margin)
+    box = (max(0, x - mx), max(0, y - my), min(w, x + fw + mx), min(h, y + fh + my))
+    return img.crop(box)
+
+
 class Scorer:
     def __init__(self):
         from transformers import AutoImageProcessor, AutoModel, CLIPModel, CLIPProcessor
@@ -208,8 +238,15 @@ class Scorer:
                 )
             )
 
-    def score_folder(self, folder, scene_emb=None):
+    def score_folder(self, folder, scene_emb=None, face_crop=False):
         images = _load_images(folder)
+        missing = []
+        if face_crop:
+            # Scene fidelity only makes sense on whole frames.
+            scene_emb = None
+            crops = [_face_crop(im) for im in images]
+            missing = [i for i, c in enumerate(crops) if c is None]
+            images = [c for c in crops if c is not None]
         if len(images) < 2:
             return None
         clip_img, dino_img = self.embed(images)
@@ -223,6 +260,9 @@ class Scorer:
             "dino_self_consistency_worst_pair": round(dino_min, 4),
             "per_pair_dino": [round(s, 4) for s in dino_pairs],
         }
+        if face_crop:
+            out["face_crop"] = True
+            out["images_without_face"] = missing
         if scene_emb is not None and len(images) == len(SCENES):
             img_n = _l2(clip_img)
             clip_t = [float(img_n[i] @ scene_emb[i]) for i in range(len(images))]
@@ -231,14 +271,14 @@ class Scorer:
         return out
 
 
-def evaluate(out_dir):
+def evaluate(out_dir, face_crop=False):
     scorer = Scorer()
     scene_emb = scorer.text(SCENES)
     results = {}
     for arm_name in ARMS:
         arm_dir = os.path.join(out_dir, arm_name)
         if os.path.isdir(arm_dir):
-            r = scorer.score_folder(arm_dir, scene_emb)
+            r = scorer.score_folder(arm_dir, scene_emb, face_crop)
             if r:
                 r["config"] = ARMS[arm_name]
                 results[arm_name] = r
@@ -277,6 +317,8 @@ def print_table(results):
             f"{r['dino_self_consistency_worst_pair']:>12.4f}"
             f"{r['clip_i_self_consistency_mean']:>13.4f}"
             f"{r.get('clip_t_scene_fidelity_mean', float('nan')):>14.4f}"
+            + (f"   faces {r['n_images']}/{r['n_images'] + len(r['images_without_face'])}"
+               if r.get("face_crop") else "")
         )
     print()
 
@@ -319,6 +361,8 @@ def main():
     ap.add_argument("--eval_dir", default=None,
                     help="Score one flat folder for self-consistency and exit.")
     ap.add_argument("--compare", nargs=2, metavar=("A_JSON", "B_JSON"))
+    ap.add_argument("--face_crop", action="store_true",
+                    help="Score face crops instead of whole frames. Writes eval_face.json.")
     args = ap.parse_args()
 
     if args.compare:
@@ -326,7 +370,7 @@ def main():
         return
 
     if args.eval_dir:
-        r = Scorer().score_folder(args.eval_dir)
+        r = Scorer().score_folder(args.eval_dir, face_crop=args.face_crop)
         print(json.dumps(r, indent=2))
         return
 
@@ -335,8 +379,9 @@ def main():
         generate(args.out_dir, args.character, args.steps, args.seed,
                  args.size, args.lora_dir, args.lora_scale)
 
-    results = evaluate(args.out_dir)
-    contact_sheet(args.out_dir)
+    results = evaluate(args.out_dir, face_crop=args.face_crop)
+    if not args.face_crop:
+        contact_sheet(args.out_dir)
 
     payload = {
         "run_utc": datetime.now(timezone.utc).isoformat(),
@@ -348,9 +393,10 @@ def main():
         "steps": args.steps,
         "base_seed": args.seed,
         "resolution": args.size,
+        "face_crop": args.face_crop,
         "arms": results,
     }
-    out_json = os.path.join(args.out_dir, "eval.json")
+    out_json = os.path.join(args.out_dir, "eval_face.json" if args.face_crop else "eval.json")
     with open(out_json, "w") as f:
         json.dump(payload, f, indent=2)
 
