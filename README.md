@@ -92,6 +92,7 @@ from google.colab import drive; drive.mount('/content/drive')
 !pip install -q diffusers transformers accelerate peft safetensors bitsandbytes ftfy datasets
 !pip install -q "protobuf>=5.29.1,<6"
 !pip uninstall -y -q torchao
+!pip install -q "opencv-python-headless<5"
 !mkdir -p /content/drive/MyDrive/ccl && ln -sfn /content/drive/MyDrive/ccl outputs
 ```
 
@@ -148,6 +149,7 @@ These came up while running on current Colab images and are handled in the code.
 - **PEFT refuses to run with Colab's preinstalled torchao 0.10.** The project does not use torchao, so setup uninstalls it.
 - **The `diffusers[training]` extra pins protobuf below 4**, which conflicts with Colab's Google libraries. Setup installs the needed packages individually and pins protobuf to a compatible range.
 - **LoRA scale is set through `set_adapters`**, which works under the PEFT backend.
+- **OpenCV 5 removed the Haar cascade face detector** from the main package. Face-cropped scoring needs the 4.x line, pinned in setup.
 
 ## Limitations
 

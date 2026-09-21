@@ -185,6 +185,13 @@ def _face_crop(img, margin=0.3, min_frac=0.06):
     """
     import cv2
 
+    if not hasattr(cv2, "CascadeClassifier"):
+        # OpenCV 5 moved the legacy Haar detector out of the main package.
+        sys.exit(
+            f"OpenCV {cv2.__version__} has no CascadeClassifier. "
+            'Install the 4.x line: pip install "opencv-python-headless<5"'
+        )
+
     rgb = np.array(img)
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     detector = cv2.CascadeClassifier(
