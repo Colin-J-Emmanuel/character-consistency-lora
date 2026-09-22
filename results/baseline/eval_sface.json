@@ -1,0 +1,82 @@
+{
+  "run_utc": "2026-09-22T21:36:34.619238+00:00",
+  "metric": "SFace cosine similarity on YuNet-aligned faces",
+  "same_id_threshold": 0.363,
+  "arms": {
+    "prompt_only": {
+      "n_faces": 6,
+      "n_images": 6,
+      "images_without_face": [],
+      "sface_identity_mean": 0.5246,
+      "sface_identity_worst_pair": 0.4101,
+      "pairs_above_same_id_threshold": 1.0,
+      "per_pair": [
+        0.5496,
+        0.5081,
+        0.5659,
+        0.6341,
+        0.5346,
+        0.5137,
+        0.587,
+        0.5359,
+        0.4483,
+        0.5328,
+        0.5139,
+        0.4288,
+        0.5588,
+        0.4101,
+        0.5479
+      ]
+    },
+    "fixed_seed": {
+      "n_faces": 6,
+      "n_images": 6,
+      "images_without_face": [],
+      "sface_identity_mean": 0.5452,
+      "sface_identity_worst_pair": 0.3749,
+      "pairs_above_same_id_threshold": 1.0,
+      "per_pair": [
+        0.5054,
+        0.5642,
+        0.6328,
+        0.5436,
+        0.4928,
+        0.5614,
+        0.5821,
+        0.5085,
+        0.5188,
+        0.6467,
+        0.6579,
+        0.5358,
+        0.5526,
+        0.3749,
+        0.5002
+      ]
+    },
+    "high_cfg": {
+      "n_faces": 6,
+      "n_images": 6,
+      "images_without_face": [],
+      "sface_identity_mean": 0.6482,
+      "sface_identity_worst_pair": 0.5093,
+      "pairs_above_same_id_threshold": 1.0,
+      "per_pair": [
+        0.8416,
+        0.7401,
+        0.6799,
+        0.7163,
+        0.6183,
+        0.7215,
+        0.6805,
+        0.6603,
+        0.601,
+        0.5722,
+        0.5787,
+        0.5834,
+        0.6064,
+        0.5093,
+        0.614
+      ]
+    }
+  }
+}

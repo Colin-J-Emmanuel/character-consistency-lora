@@ -53,30 +53,37 @@ MODELS = {
 }
 
 
+def _is_lfs_pointer(path):
+    """Git LFS pointers are small text files beginning with a version line."""
+    with open(path, "rb") as f:
+        return f.read(64).startswith(b"version https://git-lfs")
+
+
 def fetch_models(model_dir="models"):
     """Download the ONNX models once, rejecting Git LFS pointer files.
 
     raw.githubusercontent.com serves a ~130 byte text pointer for LFS-tracked
     files instead of the model, which fails later with a confusing ONNX parse
     error. The github.com/.../raw/... URL follows the redirect to the real blob.
+    Size alone is not the test: YuNet is only ~230 KB while SFace is ~37 MB.
     """
     os.makedirs(model_dir, exist_ok=True)
     paths = {}
     for key, (name, url) in MODELS.items():
         path = os.path.join(model_dir, name)
-        if not os.path.exists(path) or os.path.getsize(path) < 1_000_000:
+        if not os.path.exists(path) or _is_lfs_pointer(path):
             print(f"downloading {name}")
             urllib.request.urlretrieve(url, path)
-        size = os.path.getsize(path)
-        if size < 1_000_000:
-            head = open(path, "rb").read(40)
+        if _is_lfs_pointer(path) or os.path.getsize(path) < 50_000:
+            size = os.path.getsize(path)
             os.remove(path)
             sys.exit(
-                f"{name} downloaded as {size} bytes starting {head!r}. That is a Git "
-                "LFS pointer, not the model. Download it in a browser from the "
-                f"opencv_zoo repository and place it at {path}."
+                f"{name} came back as {size} bytes of Git LFS pointer text rather "
+                "than a model. Download it from the opencv_zoo repository in a "
+                f"browser and place it at {path}."
             )
         paths[key] = path
+        print(f"{name}: {os.path.getsize(path) / 1e6:.1f} MB")
     return paths
 
 

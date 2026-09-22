@@ -12,7 +12,31 @@ All numbers are mean pairwise cosine similarity across the six images in an arm 
 
 Scenes, seeds, arms, sampler, steps and resolution are identical across all three.
 
-## Face-cropped scoring
+## Face-recognition identity scoring (headline metric)
+
+SFace embeddings on YuNet-detected, aligned faces. 6 of 6 faces detected in every arm of every condition.
+
+**SFace identity similarity (mean / worst pair)**
+
+| Arm | Text only | LoRA token only | Text + LoRA |
+| --- | --- | --- | --- |
+| prompt_only | 0.525 / 0.410 | 0.613 / 0.431 | 0.751 / 0.653 |
+| fixed_seed | 0.545 / 0.375 | 0.679 / 0.546 | 0.809 / 0.695 |
+| high_cfg | 0.648 / 0.509 | 0.675 / 0.530 | 0.798 / 0.633 |
+
+**Change from text only to text + LoRA**
+
+| Arm | Mean | Worst pair |
+| --- | --- | --- |
+| prompt_only | +0.226 | +0.243 |
+| fixed_seed | +0.264 | +0.320 |
+| high_cfg | +0.150 | +0.124 |
+
+Every pair in every condition, including the baseline, exceeds OpenCV's 0.363 same-identity threshold, so that threshold separates nothing here and is reported only for completeness.
+
+Training set (`data/training_set_s065`, 12 images): mean 0.722, worst pair 0.620, 12 of 12 faces detected. Text + LoRA with a fixed seed scores above this.
+
+## Face-cropped scoring (DINOv2 and CLIP)
 
 Largest detected face per image, 30% margin. 6 of 6 faces detected in every arm of every condition.
 
@@ -75,8 +99,9 @@ Grid: `results/training_set/grid_s065.png`.
 
 ## Notes
 
-- **Text + LoRA vs text only** is the controlled comparison. Face DINO rises by 0.11 (`prompt_only`) and 0.09 (`high_cfg`), and by 0.04 (`fixed_seed`), which is within noise.
-- **The LoRA token alone underperforms the description** on face crops in all three arms.
+- **Text + LoRA vs text only** is the controlled comparison. SFace identity rises by 0.15 to 0.26 in all three arms, and the worst pair by 0.12 to 0.32. Face-cropped DINOv2 shows the same direction but smaller: +0.11, +0.09, and +0.04, the last within noise.
+- **The LoRA token alone beats the description on SFace** in all three arms, but underperforms it on face-cropped DINOv2. DINOv2 still responds to framing, hair and expression after cropping, and the token-only generations vary more in composition; SFace aligns the face and scores identity alone, so it is the metric to trust for this question.
+- **The adapter exceeds its training data's own consistency** (0.809 vs 0.722), so a LoRA is not capped by the coherence of its examples.
 - **The token-only condition has the highest scene fidelity** in every arm, consistent with a short subject leaving the scene words more weight. The same shift toward wider compositions explains its low whole-frame similarity.
 - **Face-crop CLIP-I barely separates the conditions** (0.80 to 0.87), while face-crop DINO ranges from 0.50 to 0.71.
 - **Green outerwear** appears in the coffee shop, rain and hiking scenes in both the text-only and token-only `prompt_only` grids, so it cannot be attributed to entanglement with the training sweater.

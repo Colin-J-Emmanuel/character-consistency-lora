@@ -1,0 +1,82 @@
+{
+  "run_utc": "2026-09-22T21:36:37.976239+00:00",
+  "metric": "SFace cosine similarity on YuNet-aligned faces",
+  "same_id_threshold": 0.363,
+  "arms": {
+    "prompt_only": {
+      "n_faces": 6,
+      "n_images": 6,
+      "images_without_face": [],
+      "sface_identity_mean": 0.7509,
+      "sface_identity_worst_pair": 0.6528,
+      "pairs_above_same_id_threshold": 1.0,
+      "per_pair": [
+        0.8307,
+        0.8471,
+        0.7409,
+        0.8356,
+        0.7181,
+        0.7759,
+        0.6743,
+        0.8081,
+        0.6781,
+        0.7212,
+        0.7998,
+        0.7435,
+        0.7398,
+        0.6528,
+        0.6973
+      ]
+    },
+    "fixed_seed": {
+      "n_faces": 6,
+      "n_images": 6,
+      "images_without_face": [],
+      "sface_identity_mean": 0.8089,
+      "sface_identity_worst_pair": 0.6945,
+      "pairs_above_same_id_threshold": 1.0,
+      "per_pair": [
+        0.8646,
+        0.8747,
+        0.8373,
+        0.8059,
+        0.79,
+        0.8458,
+        0.8259,
+        0.7981,
+        0.7575,
+        0.8651,
+        0.863,
+        0.7558,
+        0.8411,
+        0.6945,
+        0.7137
+      ]
+    },
+    "high_cfg": {
+      "n_faces": 6,
+      "n_images": 6,
+      "images_without_face": [],
+      "sface_identity_mean": 0.798,
+      "sface_identity_worst_pair": 0.6329,
+      "pairs_above_same_id_threshold": 1.0,
+      "per_pair": [
+        0.8704,
+        0.8407,
+        0.8228,
+        0.8,
+        0.7485,
+        0.8604,
+        0.8411,
+        0.8273,
+        0.7014,
+        0.8341,
+        0.8523,
+        0.7848,
+        0.8676,
+        0.6329,
+        0.6857
+      ]
+    }
+  }
+}
