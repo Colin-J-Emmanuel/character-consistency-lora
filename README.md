@@ -18,7 +18,19 @@ Adding the LoRA to the same text description makes faces markedly more consisten
 - **The LoRA token alone also beats the text description** in every arm, so the adapter carries identity on its own.
 - **Scene fidelity cost is small.** Whole-frame CLIP-T fell by 0.025 in `prompt_only` and was flat in the other two arms.
 
-Full tables, including the DINOv2 and CLIP metrics on whole frames and face crops, are in [RESULTS.md](RESULTS.md).
+**Adapter strength buys identity cheaply.** Sweeping the LoRA scale from 0 to 1.0 raises identity monotonically in every arm, while scene fidelity falls by 0.025 in one arm and is flat in the other two:
+
+| Arm | 0.0 | 0.4 | 0.7 | 1.0 |
+| --- | --- | --- | --- | --- |
+| prompt_only | 0.525 | 0.582 | 0.676 | 0.751 |
+| fixed_seed | 0.545 | 0.662 | 0.748 | 0.809 |
+| high_cfg | 0.648 | 0.721 | 0.752 | 0.798 |
+
+![LoRA scale sweep: identity rises steadily with adapter strength while scene fidelity stays roughly flat](results/scale_sweep.png)
+
+Regenerate the figure from the recorded numbers with `python eval/plot_scale_sweep.py`.
+
+Full tables, including the DINOv2 and CLIP metrics on whole frames and face crops, the scale sweep and the checkpoint comparison, are in [RESULTS.md](RESULTS.md).
 
 ## What we learned
 
@@ -31,6 +43,8 @@ Full tables, including the DINOv2 and CLIP metrics on whole frames and face crop
 **CLIP cannot tell these faces apart at all.** On whole frames CLIP-I was about 0.80 while DINOv2 was 0.24 on the same images. On face crops CLIP-I sits between 0.80 and 0.87 in every condition, while DINOv2 ranges 0.50 to 0.71 and SFace 0.52 to 0.81. CLIP matches images to captions, so any auburn-haired, freckled woman scores alike.
 
 **The adapter is more consistent than its own training data.** The 12-image training set scores 0.722 on SFace, while text + LoRA with a fixed seed reaches 0.809. The adapter learns a central identity averaged over imperfect examples rather than being capped by the worst of them.
+
+**The expected identity-versus-editability tradeoff did not appear below scale 1.0, and 800 steps was not too many.** Identity keeps climbing to the strongest setting tested, and the step-400 checkpoint is worse on identity with no compensating gain in scene fidelity. Either the crossover lies at higher scales, or CLIP-T does not capture the editability loss that matters, such as training-set clothing bleeding into unrelated scenes. Distinguishing those needs scales above 1.0 and a metric aimed at attribute leakage.
 
 **Text conditioning produces an attribute bundle, not a person.** Every baseline image kept red curly hair, freckles and green eyes, while face shape, apparent age and hair length drifted. The scar above the left eyebrow never appeared, in the baseline or in the training hero, so the LoRA had no way to learn it.
 
@@ -70,6 +84,7 @@ CLIP and DINOv2 metrics are computed on whole frames and on face crops (OpenCV's
 ## Repository layout
 
 ```
+eval/plot_scale_sweep.py         Redraws the scale-sweep figure from the eval JSON files
 eval/consistency_experiment.py   Generation and scoring harness: baseline arms, LoRA arms,
                                  whole-frame and face-cropped scoring, single-folder
                                  diagnostics, and before/after comparison
@@ -187,6 +202,7 @@ These came up while running on current Colab images and are handled in the code 
 
 ## Next steps
 
-- Compare the step-400 and step-800 checkpoints and sweep LoRA scale to trace the identity versus editability tradeoff.
+- Extend the scale sweep above 1.0 and train past 800 steps, since neither has stopped paying yet.
+- Measure attribute leakage directly (does training-set clothing appear in unrelated scenes?), which CLIP-T does not capture.
 - Build a more diverse training set with multi-view generation or pose conditioning, and retest the token-only condition.
 - Add prior preservation and measure class drift.

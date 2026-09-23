@@ -82,6 +82,45 @@ Largest detected face per image, 30% margin. 6 of 6 faces detected in every arm 
 | fixed_seed | 0.209 | 0.232 | 0.205 |
 | high_cfg | 0.213 | 0.236 | 0.217 |
 
+## Adapter scale sweep and checkpoint comparison
+
+All runs use the text + LoRA prompt, the same scenes and seeds, and the adapter from the 800-step run unless stated. Scale 0.0 is the text-only baseline; scale 1.0 is `results/lora_desc`.
+
+![LoRA scale sweep](scale_sweep.png)
+
+**SFace identity (mean) vs LoRA scale**
+
+| Arm | 0.0 | 0.4 | 0.7 | 1.0 |
+| --- | --- | --- | --- | --- |
+| prompt_only | 0.525 | 0.582 | 0.676 | 0.751 |
+| fixed_seed | 0.545 | 0.662 | 0.748 | 0.809 |
+| high_cfg | 0.648 | 0.721 | 0.752 | 0.798 |
+
+**CLIP-T scene fidelity (mean) vs LoRA scale**
+
+| Arm | 0.0 | 0.4 | 0.7 | 1.0 |
+| --- | --- | --- | --- | --- |
+| prompt_only | 0.233 | 0.233 | 0.218 | 0.208 |
+| fixed_seed | 0.209 | 0.207 | 0.214 | 0.205 |
+| high_cfg | 0.213 | 0.208 | 0.213 | 0.217 |
+
+Identity rises monotonically in every arm with no sign of flattening at 1.0. Scene fidelity falls only in `prompt_only`, by 0.025 across the whole sweep, and is flat elsewhere. Either the identity-versus-editability crossover lies above scale 1.0, or CLIP-T is too coarse to capture the kind of editability loss that matters here, such as training-set clothing appearing in unrelated scenes. This run cannot distinguish the two.
+
+**Step 400 vs step 800, both at scale 1.0**
+
+| Metric | Arm | ckpt-400 | ckpt-800 |
+| --- | --- | --- | --- |
+| SFace identity | prompt_only | 0.690 | 0.751 |
+| SFace identity | fixed_seed | 0.787 | 0.809 |
+| SFace identity | high_cfg | 0.771 | 0.798 |
+| CLIP-T scene | prompt_only | 0.211 | 0.208 |
+| CLIP-T scene | fixed_seed | 0.206 | 0.205 |
+| CLIP-T scene | high_cfg | 0.212 | 0.217 |
+
+800 steps is better on identity in every arm with no measured cost to scene fidelity, so this configuration is not overtrained at 800. Separately, ckpt-400 at scale 1.0 scores close to the 800-step adapter at scale 0.7, which is consistent with both changes shrinking the effective magnitude of the weight update; that is a hypothesis this data suggests rather than tests.
+
+Directories: `results/scale_04`, `results/scale_07`, `results/ckpt400`. Figure: `results/scale_sweep.png`, regenerated with `python eval/plot_scale_sweep.py`.
+
 ## Training set
 
 One txt2img hero portrait (seed 7) plus eleven img2img variations, scored on whole frames.
